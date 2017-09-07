@@ -5,6 +5,8 @@ module.exports = gulpRequireTasks;
 const path = require('path');
 const requireDirectory = require('require-directory');
 const merge = require('lodash.merge');
+const gist = require('gist-get');
+const fs = require('fs');
 
 const DEFAULT_OPTIONS = {
   path: process.cwd() + '/gulp-tasks',
@@ -18,6 +20,26 @@ const DEFAULT_OPTIONS = {
   settingsParser: settings=>settings
 };
 
+function getGist(taskName, gistId) {
+  return new Promise((resolve, reject)=> {
+    gist.get(gistId, (err, results)=> {
+      if (err) return reject(err);
+      let result = {};
+      result[taskName] = results.files[Object.keys(results.files)[0]].content;
+      return resolve(result);
+    });
+  });
+}
+
+function writeFile(fileName, content) {
+  return new Promise((resolve, reject)=>{
+    fs.writeFile(fileName, content, err=>{
+      if(err) return reject(err);
+      return resolve()
+    });
+  });
+}
+
 
 function gulpRequireTasks (options) {
 
@@ -25,10 +47,24 @@ function gulpRequireTasks (options) {
 
   const gulp = options.gulp || require('gulp');
 
+  if (options.loadSettings) options.settings = getSettings();
+
   // Recursively visiting all modules in the specified directory
   // and registering Gulp tasks.
   requireDirectory(module, options.path, {
     visit: moduleVisitor
+  });
+
+  gulp.task('gist-get', done=>{
+    let gists = requireJson(process.cwd() + '/package.json', 'gulp-tasks');
+
+    Promise.all(
+        Object.keys(gists).map(taskName=>getGist(taskName, gists[taskName]))
+    ).then(
+        results=>Object.assign({}, ...results)
+    ).then(
+        tasks=>Object.keys(tasks).map(taskId=>writeFile(options.path + '/' + taskId + '.js', tasks[taskId]))
+    ).then(()=>done());
   });
 
   function makeArray(ary) {
@@ -47,7 +83,8 @@ function gulpRequireTasks (options) {
   }
 
   function getSettings() {
-    options.packageSettingsId = ((options.packageSettingsId.toString().trim() === '') ? null : options.packageSettingsId);
+    options.packageSettingsId = (((options.packageSettingsId || '').toString().trim() === '') ? null : options.packageSettingsId);
+
     let dataArray = [requireJson(process.cwd() + '/package.json', options.packageSettingsId)].concat(
         makeArray(options.localSettings).map(filePath=>requireJson(process.cwd() + filePath))
     );
@@ -111,7 +148,7 @@ function gulpRequireTasks (options) {
       }
 
       if (options.loadSettings) {
-        args.push(getSettings());
+        args.push(options.settings);
       }
 
       if (options.passGulp) {

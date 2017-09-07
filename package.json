@@ -27,8 +27,12 @@
     "node": ">=4.8"
   },
   "dependencies": {
+    "bluebird": "^3.5.0",
     "gulp": "^3.9.1",
     "lodash.merge": "^4.6.0",
     "require-directory": "^2.1.1"
+  },
+  "devDependencies": {
+    "gist-get": "^2.0.0"
   }
 }
