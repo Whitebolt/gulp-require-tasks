@@ -8,6 +8,8 @@ const merge = require('lodash.merge');
 const gist = require('gist-get');
 const fs = require('fs');
 
+const charsSequence = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz'.split('');
+
 const DEFAULT_OPTIONS = {
   path: process.cwd() + '/gulp-tasks',
   separator: ':',
@@ -19,6 +21,13 @@ const DEFAULT_OPTIONS = {
   localSettings: '/local.json',
   settingsParser: settings=>settings
 };
+
+function randomString(length=32) {
+  if (! length) length = Math.floor(Math.random() * charsSequence.length);
+  let str = '';
+  for (let i = 0; i < length; i++) str += charsSequence[Math.floor(Math.random() * charsSequence.length)];
+  return str;
+}
 
 function getGist(taskName, gistId) {
   return new Promise((resolve, reject)=> {
@@ -35,13 +44,15 @@ function writeFile(fileName, content) {
   return new Promise((resolve, reject)=>{
     fs.writeFile(fileName, content, err=>{
       if(err) return reject(err);
-      return resolve()
+      return resolve();
     });
   });
 }
 
 
 function gulpRequireTasks (options) {
+  const taskList = new Set();
+  const gists = requireJson(process.cwd() + '/package.json', 'gulp-tasks');
 
   options = Object.assign({}, DEFAULT_OPTIONS, options);
 
@@ -56,8 +67,6 @@ function gulpRequireTasks (options) {
   });
 
   gulp.task('gist-get', done=>{
-    let gists = requireJson(process.cwd() + '/package.json', 'gulp-tasks');
-
     Promise.all(
         Object.keys(gists).map(taskName=>getGist(taskName, gists[taskName]))
     ).then(
@@ -66,6 +75,23 @@ function gulpRequireTasks (options) {
         tasks=>Object.keys(tasks).map(taskId=>writeFile(options.path + '/' + taskId + '.js', tasks[taskId]))
     ).then(()=>done());
   });
+
+  const taskName = process.argv[process.argv.length-1];
+  if (!taskList.has(taskName) && gists.hasOwnProperty(taskName)) {
+    const taskPath = options.path + '/' + taskName + '.js';
+    const taskId = randomString();
+
+    gulp.task(taskName, [], done=>{
+      getGist(taskName, gists[taskName]).then(
+          result=>writeFile(taskPath, result[taskName])
+      ).then(()=>{
+        moduleVisitor(require(taskPath), taskPath, taskId);
+        return Promise.resolve(gulp.tasks[taskId].fn());
+      }).then(()=>{
+        done();
+      })
+    });
+  }
 
   function makeArray(ary) {
     return (Array.isArray(ary)?ary:[ary]);
@@ -98,11 +124,9 @@ function gulpRequireTasks (options) {
    * @param {object|function} module
    * @param {string} modulePath
    */
-  function moduleVisitor (module, modulePath) {
+  function moduleVisitor (module, modulePath, taskName=taskNameFromPath(modulePath)) {
 
     module = normalizeModule(module);
-
-    const taskName = taskNameFromPath(modulePath);
 
     if (module.dep) {
       console.warn(
@@ -110,6 +134,8 @@ function gulpRequireTasks (options) {
         'Use "deps" instead.'
       );
     }
+
+    taskList.add(taskName);
 
     gulp.task(
       taskName,
