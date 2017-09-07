@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "gulp": "^3.9.1",
+    "lodash.merge": "^4.6.0",
     "require-directory": "^2.1.1"
   }
 }
