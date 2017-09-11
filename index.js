@@ -7,139 +7,139 @@ const requireDirectory = require('require-directory');
 const {makeArray, requireJson, merge} = require('./lib/util');
 
 const DEFAULT_OPTIONS = {
-  path: process.cwd() + '/gulp-tasks',
-  separator: ':',
-  passGulp: true,
-  passCallback: true,
-  gulp: null,
-  loadSettings: false,
-  packageSettingsId: 'gulp',
-  localSettings: '/local.json',
-  settingsParser: settings=>settings
+	path: process.cwd() + '/gulp-tasks',
+	separator: ':',
+	passGulp: true,
+	passCallback: true,
+	gulp: null,
+	loadSettings: false,
+	packageSettingsId: 'gulp',
+	localSettings: '/local.json',
+	settingsParser: settings=>settings
 };
 
 
 function gulpRequireTasks (options) {
 
-  options = Object.assign({}, DEFAULT_OPTIONS, options);
+	options = Object.assign({}, DEFAULT_OPTIONS, options);
 
-  const gulp = options.gulp || require('gulp');
+	const gulp = options.gulp || require('gulp');
 
-  // Recursively visiting all modules in the specified directory
-  // and registering Gulp tasks.
-  requireDirectory(module, options.path, {
-    visit: moduleVisitor
-  });
+	// Recursively visiting all modules in the specified directory
+	// and registering Gulp tasks.
+	requireDirectory(module, options.path, {
+		visit: moduleVisitor
+	});
 
-  function getSettings() {
-    options.packageSettingsId = ((options.packageSettingsId.toString().trim() === '') ? null : options.packageSettingsId);
-    let dataArray = [requireJson(process.cwd() + '/package.json', options.packageSettingsId)].concat(
-        makeArray(options.localSettings).map(filePath=>requireJson(process.cwd() + filePath))
-    );
-    return options.settingsParser(merge({}, ...dataArray), dataArray, requireJson(process.cwd() + '/package.json'));
-  }
-
-
-  /**
-   * Registers the specified module. Task name is deducted from the specified path.
-   *
-   * @param {object|function} module
-   * @param {string} modulePath
-   */
-  function moduleVisitor (module, modulePath) {
-
-    module = normalizeModule(module);
-
-    const taskName = taskNameFromPath(modulePath);
-
-    if (module.dep) {
-      console.warn(
-          'Usage of "module.dep" property is deprecated and will be removed in next major version. ' +
-          'Use "deps" instead.'
-      );
-    }
-
-    gulp.task(
-        taskName,
-        // @todo: deprecate `module.dep` in 2.0.0
-        module.deps || module.dep || [],
-        module.nativeTask || taskFunction
-    );
+	function getSettings() {
+		options.packageSettingsId = ((options.packageSettingsId.toString().trim() === '') ? null : options.packageSettingsId);
+		let dataArray = [requireJson(process.cwd() + '/package.json', options.packageSettingsId)].concat(
+			makeArray(options.localSettings).map(filePath=>requireJson(process.cwd() + filePath))
+		);
+		return options.settingsParser(merge({}, ...dataArray), dataArray, requireJson(process.cwd() + '/package.json'));
+	}
 
 
-    /**
-     * Wrapper around user task function.
-     * It passes special arguments to the user function according
-     * to the configuration.
-     *
-     * @param {function} callback
-     *
-     * @returns {*}
-     */
-    function taskFunction (callback) {
+	/**
+	 * Registers the specified module. Task name is deducted from the specified path.
+	 *
+	 * @param {object|function} module
+	 * @param {string} modulePath
+	 */
+	function moduleVisitor (module, modulePath) {
 
-      if ('function' !== typeof module.fn) {
-        callback();
-        return;
-      }
+		module = normalizeModule(module);
 
-      let args = [];
+		const taskName = taskNameFromPath(modulePath);
 
-      // @deprecated
-      // @todo: remove this in 2.0.0
-      if (options.arguments) {
-        console.warn(
-            'Usage of "arguments" option is deprecated and will be removed in next major version. ' +
-            'Use globals or module imports instead.'
-        );
-        args = Array.from(options.arguments);
-      }
+		if (module.dep) {
+			console.warn(
+				'Usage of "module.dep" property is deprecated and will be removed in next major version. ' +
+				'Use "deps" instead.'
+			);
+		}
 
-      if (options.loadSettings) {
-        args.push(getSettings());
-      }
+		gulp.task(
+			taskName,
+			// @todo: deprecate `module.dep` in 2.0.0
+			module.deps || module.dep || [],
+			module.nativeTask || taskFunction
+		);
 
-      if (options.passGulp) {
-        args.unshift(gulp);
-      }
 
-      if (options.passCallback) {
-        args.push(callback);
-      }
+		/**
+		 * Wrapper around user task function.
+		 * It passes special arguments to the user function according
+		 * to the configuration.
+		 *
+		 * @param {function} callback
+		 *
+		 * @returns {*}
+		 */
+		function taskFunction (callback) {
 
-      return module.fn.apply(module, args);
+			if ('function' !== typeof module.fn) {
+				callback();
+				return;
+			}
 
-    }
+			let args = [];
 
-    /**
-     * Deducts task name from the specified module path.
-     *
-     * @returns {string}
-     */
-    function taskNameFromPath (modulePath) {
+			// @deprecated
+			// @todo: remove this in 2.0.0
+			if (options.arguments) {
+				console.warn(
+					'Usage of "arguments" option is deprecated and will be removed in next major version. ' +
+					'Use globals or module imports instead.'
+				);
+				args = Array.from(options.arguments);
+			}
 
-      const relativePath = path.relative(options.path, modulePath);
+			if (options.loadSettings) {
+				args.push(getSettings());
+			}
 
-      // Registering root index.js as a default task.
-      if ('index.js' === relativePath) {
-        return 'default';
-      }
+			if (options.passGulp) {
+				args.unshift(gulp);
+			}
 
-      const pathInfo = path.parse(relativePath);
-      const taskNameParts = [];
+			if (options.passCallback) {
+				args.push(callback);
+			}
 
-      if (pathInfo.dir) {
-        taskNameParts.push.apply(taskNameParts, pathInfo.dir.split(path.sep));
-      }
-      if ('index' !== pathInfo.name) {
-        taskNameParts.push(pathInfo.name);
-      }
+			return module.fn.apply(module, args);
 
-      return taskNameParts.join(options.separator);
+		}
 
-    }
+		/**
+		 * Deducts task name from the specified module path.
+		 *
+		 * @returns {string}
+		 */
+		function taskNameFromPath (modulePath) {
 
-  }
+			const relativePath = path.relative(options.path, modulePath);
+
+			// Registering root index.js as a default task.
+			if ('index.js' === relativePath) {
+				return 'default';
+			}
+
+			const pathInfo = path.parse(relativePath);
+			const taskNameParts = [];
+
+			if (pathInfo.dir) {
+				taskNameParts.push.apply(taskNameParts, pathInfo.dir.split(path.sep));
+			}
+			if ('index' !== pathInfo.name) {
+				taskNameParts.push(pathInfo.name);
+			}
+
+			return taskNameParts.join(options.separator);
+
+		}
+
+	}
 
 }
 
@@ -151,12 +151,12 @@ function gulpRequireTasks (options) {
  * @returns {object}
  */
 function normalizeModule (module) {
-  if ('function' === typeof module) {
-    return {
-      fn: module,
-      deps: []
-    };
-  } else {
-    return module;
-  }
+	if ('function' === typeof module) {
+		return {
+			fn: module,
+			deps: []
+		};
+	} else {
+		return module;
+	}
 }
