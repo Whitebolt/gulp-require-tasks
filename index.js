@@ -5,8 +5,9 @@ module.exports = gulpRequireTasks;
 const path = require('path');
 const requireDirectory = require('require-directory');
 const git = require('simple-git')(process.cwd());
-const {makeArray, requireJson, merge, randomString} = require('./lib/util');
+const {makeArray, requireJson, merge, randomString, nodeInstall} = require('./lib/util');
 const install = require('npm-install-package');
+const yinstall = require('yarn-install');
 
 const parentPackagePath = process.cwd() + '/package.json';
 
@@ -48,21 +49,13 @@ function gulpRequireTasks (options) {
 	}
 
 	function installRequires(module) {
-		return new Promise((resolve, reject)=>{
-			if (module.requires && Object.keys(module.requires).length) {
-				install(Object.keys(module.requires).map(moduleId=>{
-					return moduleId + '@' + module.requires[moduleId];
-				}), {}, err=>{
-					if (err) return reject(err);
-					resolve();
-				});
-			} else {
-				resolve();
-			}
-		});
+		return ((module.requires && Object.keys(module.requires).length) ?
+			nodeInstall(module.requires, true).then(()=>module) :
+			Promise.resolve(module)
+		);
 	}
 
-	function importGist(gistId, taskId, overrideTaskName) {
+	function gistClone(taskId, gistId) {
 		return new Promise((resolve, reject)=>{
 			git.clone(
 				'https://gist.github.com/' + gistId + '.git',
@@ -70,24 +63,28 @@ function gulpRequireTasks (options) {
 				{},
 				err=>{
 					if (err) return reject(err);
-					let modulePath = options.path + '/' + taskId + '/' + taskId + '.js';
-					let module = require(modulePath);
-					moduleVisitor(module, modulePath, overrideTaskName);
-
-					let requires = installRequires(module);
-
-					if (module.deps && module.deps.length) {
-						return resolve(Promise.all(module.deps.map(dep=>{
-							if ((dep !== '') && !gulp.tasks.hasOwnProperty(dep) && gistsToImport.hasOwnProperty(dep)) {
-								return importGist(gistsToImport[dep], dep);
-							}
-							return Promise.resolve();
-						})));
-					}
-
-					return resolve(requires);
+					resolve();
 				}
 			);
+		});
+	}
+
+	function importDep(dep) {
+		return (
+			((dep !== '') && !gulp.tasks.hasOwnProperty(dep) && gistsToImport.hasOwnProperty(dep)) ?
+				importGist(gistsToImport[dep], dep) :
+				Promise.resolve()
+		);
+	}
+
+	function importGist(gistId, taskId, overrideTaskName) {
+		return gistClone(taskId, gistId).then(()=>{
+			let modulePath = options.path + '/' + taskId + '/' + taskId + '.js';
+			let module = require(modulePath);
+			moduleVisitor(module, modulePath, overrideTaskName);
+			return installRequires(module);
+		}).then(module=>{
+			if (module.deps && module.deps.length) return Promise.all(module.deps.map(importDep));
 		});
 	}
 
