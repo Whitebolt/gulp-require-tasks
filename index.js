@@ -4,14 +4,18 @@ module.exports = gulpRequireTasks;
 
 const path = require('path');
 const requireDirectory = require('require-directory');
-
+const merge = require('lodash.merge');
 
 const DEFAULT_OPTIONS = {
   path: process.cwd() + '/gulp-tasks',
   separator: ':',
   passGulp: true,
   passCallback: true,
-  gulp: null
+  gulp: null,
+  loadSettings: false,
+  packageSettingsId: 'gulp',
+  localSettings: '/local.json',
+  settingsParser: settings=>settings
 };
 
 
@@ -26,6 +30,29 @@ function gulpRequireTasks (options) {
   requireDirectory(module, options.path, {
     visit: moduleVisitor
   });
+
+  function makeArray(ary) {
+    return (Array.isArray(ary)?ary:[ary]);
+  }
+
+  function requireJson(filePath, property) {
+    try {
+      if (filePath.trim() !== '') {
+        let data = require(filePath);
+        return (property ? data[property] || {} : data);
+      }
+    } catch(err) {
+    }
+    return {};
+  }
+
+  function getSettings() {
+    options.packageSettingsId = ((options.packageSettingsId.toString().trim() === '') ? null : options.packageSettingsId);
+    let dataArray = [requireJson(process.cwd() + '/package.json', options.packageSettingsId)].concat(
+        makeArray(options.localSettings).map(filePath=>requireJson(process.cwd() + filePath))
+    );
+    return options.settingsParser(merge({}, ...dataArray), dataArray, requireJson(process.cwd() + '/package.json'));
+  }
 
 
   /**
@@ -42,16 +69,16 @@ function gulpRequireTasks (options) {
 
     if (module.dep) {
       console.warn(
-        'Usage of "module.dep" property is deprecated and will be removed in next major version. ' +
-        'Use "deps" instead.'
+          'Usage of "module.dep" property is deprecated and will be removed in next major version. ' +
+          'Use "deps" instead.'
       );
     }
 
     gulp.task(
-      taskName,
-      // @todo: deprecate `module.dep` in 2.0.0
-      module.deps || module.dep || [],
-      module.nativeTask || taskFunction
+        taskName,
+        // @todo: deprecate `module.dep` in 2.0.0
+        module.deps || module.dep || [],
+        module.nativeTask || taskFunction
     );
 
 
@@ -77,10 +104,14 @@ function gulpRequireTasks (options) {
       // @todo: remove this in 2.0.0
       if (options.arguments) {
         console.warn(
-          'Usage of "arguments" option is deprecated and will be removed in next major version. ' +
-          'Use globals or module imports instead.'
+            'Usage of "arguments" option is deprecated and will be removed in next major version. ' +
+            'Use globals or module imports instead.'
         );
         args = Array.from(options.arguments);
+      }
+
+      if (options.loadSettings) {
+        args.push(getSettings());
       }
 
       if (options.passGulp) {
