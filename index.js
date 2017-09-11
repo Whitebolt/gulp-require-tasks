@@ -4,7 +4,10 @@ module.exports = gulpRequireTasks;
 
 const path = require('path');
 const requireDirectory = require('require-directory');
-const {makeArray, requireJson, merge} = require('./lib/util');
+const git = require('simple-git')(process.cwd());
+const {makeArray, requireJson, merge, randomString} = require('./lib/util');
+
+const parentPackagePath = process.cwd() + '/package.json';
 
 const DEFAULT_OPTIONS = {
 	path: process.cwd() + '/gulp-tasks',
@@ -18,27 +21,74 @@ const DEFAULT_OPTIONS = {
 	settingsParser: settings=>settings
 };
 
+function getTaskIdFromArgs(args) {
+	return args.find(arg=>/^[^/\-]/.test(arg));
+}
+
 
 function gulpRequireTasks (options) {
 
 	options = Object.assign({}, DEFAULT_OPTIONS, options);
 
 	const gulp = options.gulp || require('gulp');
+	const taskId  = (getTaskIdFromArgs(process.argv) || '').trim();
+	const gistsToImport = requireJson(parentPackagePath, 'gulp-tasks');
 
 	// Recursively visiting all modules in the specified directory
 	// and registering Gulp tasks.
 	requireDirectory(module, options.path, {
-		visit: moduleVisitor
+		visit: (module, modulePath)=>moduleVisitor(module, modulePath)
 	});
+
+
+
+	if ((taskId !== '') && !gulp.tasks.hasOwnProperty(taskId) && gistsToImport.hasOwnProperty(taskId)) {
+		loadMissingTask(taskId);
+	}
+
+	function importGist(gistId, taskId, overrideTaskName) {
+		return new Promise((resolve, reject)=>{
+			git.clone(
+				'https://gist.github.com/' + gistId + '.git',
+				options.path + '/' + taskId + '/',
+				{},
+				err=>{
+					if (err) return reject(err);
+					let modulePath = options.path + '/' + taskId + '/' + taskId + '.js';
+					let module = require(modulePath);
+					moduleVisitor(module, modulePath, overrideTaskName);
+
+					if (module.deps && module.deps.length) {
+						return resolve(Promise.all(module.deps.map(dep=>{
+							if ((dep !== '') && !gulp.tasks.hasOwnProperty(dep) && gistsToImport.hasOwnProperty(dep)) {
+								return importGist(gistsToImport[dep], dep);
+							}
+							return Promise.resolve();
+						})));
+					}
+
+					return resolve();
+				}
+			);
+		});
+	}
+
+	function loadMissingTask(taskId) {
+		gulp.task(taskId, [], done=>{
+			const overrideTaskName = randomString();
+			importGist(gistsToImport[taskId], taskId, overrideTaskName)
+				.then(()=>gulp.start(overrideTaskName))
+				.then(()=>done());
+		});
+	}
 
 	function getSettings() {
 		options.packageSettingsId = ((options.packageSettingsId.toString().trim() === '') ? null : options.packageSettingsId);
-		let dataArray = [requireJson(process.cwd() + '/package.json', options.packageSettingsId)].concat(
+		let dataArray = [requireJson(parentPackagePath, options.packageSettingsId)].concat(
 			makeArray(options.localSettings).map(filePath=>requireJson(process.cwd() + filePath))
 		);
-		return options.settingsParser(merge({}, ...dataArray), dataArray, requireJson(process.cwd() + '/package.json'));
+		return options.settingsParser(merge({}, ...dataArray), dataArray, requireJson(parentPackagePath));
 	}
-
 
 	/**
 	 * Registers the specified module. Task name is deducted from the specified path.
@@ -46,11 +96,10 @@ function gulpRequireTasks (options) {
 	 * @param {object|function} module
 	 * @param {string} modulePath
 	 */
-	function moduleVisitor (module, modulePath) {
-
+	function moduleVisitor (module, modulePath, overrideTaskName) {
 		module = normalizeModule(module);
 
-		const taskName = taskNameFromPath(modulePath);
+		const taskName = overrideTaskName || taskNameFromPath(modulePath);
 
 		if (module.dep) {
 			console.warn(
@@ -95,20 +144,11 @@ function gulpRequireTasks (options) {
 				args = Array.from(options.arguments);
 			}
 
-			if (options.loadSettings) {
-				args.push(getSettings());
-			}
-
-			if (options.passGulp) {
-				args.unshift(gulp);
-			}
-
-			if (options.passCallback) {
-				args.push(callback);
-			}
+			if (options.loadSettings) args.push(getSettings());
+			if (options.passGulp) args.unshift(gulp);
+			if (options.passCallback) args.push(callback);
 
 			return module.fn.apply(module, args);
-
 		}
 
 		/**
@@ -133,6 +173,10 @@ function gulpRequireTasks (options) {
 			}
 			if ('index' !== pathInfo.name) {
 				taskNameParts.push(pathInfo.name);
+			}
+
+			if ((taskNameParts.length > 1) && (taskNameParts[taskNameParts.length - 1] === taskNameParts[taskNameParts.length - 2])) {
+				taskNameParts.pop();
 			}
 
 			return taskNameParts.join(options.separator);
