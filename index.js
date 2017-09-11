@@ -79,13 +79,15 @@ function gulpRequireTasks (options) {
   const taskName = process.argv[process.argv.length-1];
   if (!taskList.has(taskName) && gists.hasOwnProperty(taskName)) {
     const taskPath = options.path + '/' + taskName + '.js';
-    const taskId = randomString();
+
+    console.log('DOWNLOADING...');
 
     gulp.task(taskName, [], done=>{
       getGist(taskName, gists[taskName]).then(
           result=>writeFile(taskPath, result[taskName])
       ).then(()=>{
-        moduleVisitor(require(taskPath), taskPath, taskId);
+        const taskId = moduleVisitor(require(taskPath));
+        console.log(gulp.tasks);
         return Promise.resolve(gulp.tasks[taskId].fn());
       }).then(()=>{
         done();
@@ -117,6 +119,33 @@ function gulpRequireTasks (options) {
     return options.settingsParser(merge({}, ...dataArray), dataArray, requireJson(process.cwd() + '/package.json'));
   }
 
+  /**
+   * Deducts task name from the specified module path.
+   *
+   * @returns {string}
+   */
+  function taskNameFromPath (modulePath) {
+    const relativePath = path.relative(options.path, modulePath);
+
+    // Registering root index.js as a default task.
+    if ('index.js' === relativePath) {
+      return 'default';
+    }
+
+    const pathInfo = path.parse(relativePath);
+    const taskNameParts = [];
+
+    if (pathInfo.dir) {
+      taskNameParts.push.apply(taskNameParts, pathInfo.dir.split(path.sep));
+    }
+    if ('index' !== pathInfo.name) {
+      taskNameParts.push(pathInfo.name);
+    }
+
+    return taskNameParts.join(options.separator).replace(/\.js/, '');
+
+  }
+
 
   /**
    * Registers the specified module. Task name is deducted from the specified path.
@@ -124,7 +153,9 @@ function gulpRequireTasks (options) {
    * @param {object|function} module
    * @param {string} modulePath
    */
-  function moduleVisitor (module, modulePath, taskName=taskNameFromPath(modulePath)) {
+  function moduleVisitor (module, modulePath) {
+
+    const taskName = (modulePath ? taskNameFromPath(modulePath) : randomString());
 
     module = normalizeModule(module);
 
@@ -136,6 +167,17 @@ function gulpRequireTasks (options) {
     }
 
     taskList.add(taskName);
+
+    if (module.requires) {
+      Object.keys(module.requires).forEach(moduleId=>{
+        console.log(moduleId);
+        try {
+          require(moduleId);
+        } catch (err) {
+          console.log('FAILED TO LOAD: ', moduleId);
+        }
+      });
+    }
 
     gulp.task(
       taskName,
@@ -189,34 +231,7 @@ function gulpRequireTasks (options) {
 
     }
 
-    /**
-     * Deducts task name from the specified module path.
-     *
-     * @returns {string}
-     */
-    function taskNameFromPath (modulePath) {
-
-      const relativePath = path.relative(options.path, modulePath);
-
-      // Registering root index.js as a default task.
-      if ('index.js' === relativePath) {
-        return 'default';
-      }
-
-      const pathInfo = path.parse(relativePath);
-      const taskNameParts = [];
-
-      if (pathInfo.dir) {
-        taskNameParts.push.apply(taskNameParts, pathInfo.dir.split(path.sep));
-      }
-      if ('index' !== pathInfo.name) {
-        taskNameParts.push(pathInfo.name);
-      }
-
-      return taskNameParts.join(options.separator);
-
-    }
-
+    return taskName;
   }
 
 }
