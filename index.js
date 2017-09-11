@@ -5,11 +5,11 @@ module.exports = gulpRequireTasks;
 const path = require('path');
 const requireDirectory = require('require-directory');
 const git = require('simple-git')(process.cwd());
-const {makeArray, requireJson, merge, randomString, nodeInstall} = require('./lib/util');
-const install = require('npm-install-package');
-const yinstall = require('yarn-install');
+const {makeArray, requireJson, merge, randomString, nodeInstall, fileExists} = require('./lib/util');
+const commandExists = require('command-exists').sync;
 
 const parentPackagePath = process.cwd() + '/package.json';
+const yarn = fileExists(process.cwd() + '/yarn.lock') && commandExists('yarn');
 
 const DEFAULT_OPTIONS = {
 	path: process.cwd() + '/gulp-tasks',
@@ -20,7 +20,8 @@ const DEFAULT_OPTIONS = {
 	loadSettings: false,
 	packageSettingsId: 'gulp',
 	localSettings: '/local.json',
-	settingsParser: settings=>settings
+	settingsParser: settings=>settings,
+	yarn
 };
 
 function getTaskIdFromArgs(args) {
@@ -49,8 +50,9 @@ function gulpRequireTasks (options) {
 	}
 
 	function installRequires(module) {
+		console.log(options.yarn, yarn);
 		return ((module.requires && Object.keys(module.requires).length) ?
-			nodeInstall(module.requires, true).then(()=>module) :
+			nodeInstall(module.requires, options.yarn).then(()=>module) :
 			Promise.resolve(module)
 		);
 	}

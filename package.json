@@ -27,6 +27,7 @@
     "node": ">=4.8"
   },
   "dependencies": {
+    "command-exists": "^1.2.2",
     "gulp": "^3.9.1",
     "require-directory": "^2.1.1",
     "simple-git": "^1.77.0"
