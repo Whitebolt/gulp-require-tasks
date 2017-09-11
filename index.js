@@ -4,8 +4,7 @@ module.exports = gulpRequireTasks;
 
 const path = require('path');
 const requireDirectory = require('require-directory');
-const merge = require('lodash.merge');
-const {makeArray, requireJson} = require('./lib/util');
+const {makeArray, requireJson, merge} = require('./lib/util');
 
 const DEFAULT_OPTIONS = {
   path: process.cwd() + '/gulp-tasks',
