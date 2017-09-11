@@ -50,7 +50,6 @@ function gulpRequireTasks (options) {
 	}
 
 	function installRequires(module) {
-		console.log(options.yarn, yarn);
 		return ((module.requires && Object.keys(module.requires).length) ?
 			nodeInstall(module.requires, options.yarn).then(()=>module) :
 			Promise.resolve(module)
