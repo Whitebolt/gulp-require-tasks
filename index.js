@@ -5,6 +5,7 @@ module.exports = gulpRequireTasks;
 const path = require('path');
 const requireDirectory = require('require-directory');
 const merge = require('lodash.merge');
+const {makeArray, requireJson} = require('./lib/util');
 
 const DEFAULT_OPTIONS = {
   path: process.cwd() + '/gulp-tasks',
@@ -30,21 +31,6 @@ function gulpRequireTasks (options) {
   requireDirectory(module, options.path, {
     visit: moduleVisitor
   });
-
-  function makeArray(ary) {
-    return (Array.isArray(ary)?ary:[ary]);
-  }
-
-  function requireJson(filePath, property) {
-    try {
-      if (filePath.trim() !== '') {
-        let data = require(filePath);
-        return (property ? data[property] || {} : data);
-      }
-    } catch(err) {
-    }
-    return {};
-  }
 
   function getSettings() {
     options.packageSettingsId = ((options.packageSettingsId.toString().trim() === '') ? null : options.packageSettingsId);
