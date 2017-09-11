@@ -6,6 +6,7 @@ const path = require('path');
 const requireDirectory = require('require-directory');
 const git = require('simple-git')(process.cwd());
 const {makeArray, requireJson, merge, randomString} = require('./lib/util');
+const install = require('npm-install-package');
 
 const parentPackagePath = process.cwd() + '/package.json';
 
@@ -46,6 +47,21 @@ function gulpRequireTasks (options) {
 		loadMissingTask(taskId);
 	}
 
+	function installRequires(module) {
+		return new Promise((resolve, reject)=>{
+			if (module.requires && Object.keys(module.requires).length) {
+				install(Object.keys(module.requires).map(moduleId=>{
+					return moduleId + '@' + module.requires[moduleId];
+				}), {}, err=>{
+					if (err) return reject(err);
+					resolve();
+				});
+			} else {
+				resolve();
+			}
+		});
+	}
+
 	function importGist(gistId, taskId, overrideTaskName) {
 		return new Promise((resolve, reject)=>{
 			git.clone(
@@ -58,6 +74,8 @@ function gulpRequireTasks (options) {
 					let module = require(modulePath);
 					moduleVisitor(module, modulePath, overrideTaskName);
 
+					let requires = installRequires(module);
+
 					if (module.deps && module.deps.length) {
 						return resolve(Promise.all(module.deps.map(dep=>{
 							if ((dep !== '') && !gulp.tasks.hasOwnProperty(dep) && gistsToImport.hasOwnProperty(dep)) {
@@ -67,7 +85,7 @@ function gulpRequireTasks (options) {
 						})));
 					}
 
-					return resolve();
+					return resolve(requires);
 				}
 			);
 		});
@@ -198,7 +216,8 @@ function normalizeModule (module) {
 	if ('function' === typeof module) {
 		return {
 			fn: module,
-			deps: []
+			deps: [],
+			requires: {}
 		};
 	} else {
 		return module;

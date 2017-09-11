@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "gulp": "^3.9.1",
+    "npm-install-package": "^2.1.0",
     "require-directory": "^2.1.1",
     "simple-git": "^1.77.0"
   }
