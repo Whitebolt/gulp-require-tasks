@@ -5,8 +5,9 @@ module.exports = gulpRequireTasks;
 const path = require('path');
 const requireDirectory = require('require-directory');
 const git = require('simple-git')(process.cwd());
-const {makeArray, requireJson, merge, randomString, nodeInstall, fileExists} = require('./lib/util');
+const {makeArray, requireJson, merge, randomString, nodeInstall, fileExists, mkdir} = require('./lib/util');
 const commandExists = require('command-exists').sync;
+const fs = require('fs');
 
 const parentPackagePath = process.cwd() + '/package.json';
 const yarn = fileExists(process.cwd() + '/yarn.lock') && commandExists('yarn');
@@ -36,6 +37,8 @@ function gulpRequireTasks (options) {
 	const gulp = options.gulp || require('gulp');
 	const taskId  = (getTaskIdFromArgs(process.argv) || '').trim();
 	const gistsToImport = requireJson(parentPackagePath, 'gulp-tasks');
+
+	mkdir(options.path + '/');
 
 	// Recursively visiting all modules in the specified directory
 	// and registering Gulp tasks.
